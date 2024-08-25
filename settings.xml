@@ -1,0 +1,9 @@
+<settings>
+	<servers>
+		<server>
+			<id>my-exchange-v2</id>
+			<username>~~~Client~~~</username>
+			<password>${connectedapp_client_id}~?~${connectedapp_client_secret}</password>
+		</server>
+	</servers>
+</settings>

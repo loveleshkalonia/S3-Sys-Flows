@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	xmlns:s3="http://www.mulesoft.org/schema/mule/s3"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<s3:config name="Amazon_S3_Configuration" doc:name="Amazon S3 Configuration" doc:id="872f41d9-c137-4713-acbc-6526b9428737" >
+		<s3:connection accessKey="${aws.s3.accessKey}" secretKey="${aws.s3.secretKey}" region="${aws.s3.region}" connectionTimeout="${aws.s3.connectionTimeout}" responseTimeout="${aws.s3.responseTimeout}" maxConnections="${aws.s3.maxConnections}">
+			<reconnection >
+				<reconnect frequency="${aws.s3.reconnection.frequency}" count="${aws.s3.reconnection.attempts}"/>
+			</reconnection>
+			<s3:role arn="${aws.s3.role.arn}" duration="${aws.s3.role.duration}"/>
+		</s3:connection>
+	</s3:config>
+	<sub-flow name="sf-s3-put-object" doc:id="f2449c41-def1-4ef7-8522-629a870a5559" >
+		<ee:transform doc:name="Parameter Validation" doc:id="23129802-e286-4814-82ea-bc75b4e30636" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="s3ParameterValidationError" ><![CDATA[%dw 2.0
+output application/json
+var error = (
+	(if (isEmpty(vars.s3Bucket)) "Bucket name is missing; " else "") ++
+	(if (isEmpty(vars.s3ObjectKey)) "Object key (fully qualified file name) is missing; " else "") ++
+	(if (isEmpty(payload)) "File content missing; " else "")
+)
+---
+if (isEmpty(error)) ""
+else error
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="sf-s3-validation-result-check" doc:id="4192b036-e517-4515-95e5-0b8b9ebc391f" name="sf-s3-validation-result-check"/>
+		<s3:put-object doc:name="Put Object" doc:id="dcaedfc3-dba0-48cc-89d9-8219ccfed633" contentLength="#[sizeOf(payload)]" bucketName="#[vars.s3Bucket]" key="#[vars.s3ObjectKey]" config-ref="Amazon_S3_Configuration"/>
+	</sub-flow>
+	<sub-flow name="sf-s3-fetch-object" doc:id="47ca3144-fff2-4621-bf0e-faf3124ef14c" >
+		<ee:transform doc:name="Parameter Validation" doc:id="57d3f771-a3ce-4e2b-acec-1c48ebe0c909" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="s3ParameterValidationError" ><![CDATA[%dw 2.0
+output application/json
+var error = (
+	(if (isEmpty(vars.s3Bucket)) "Bucket name is missing; " else "") ++
+	(if (isEmpty(vars.s3ObjectKey)) "Object key (fully qualified file name) is missing; " else "")
+)
+---
+if (isEmpty(error)) ""
+else error
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="sf-s3-validation-result-check" doc:id="895460f0-8ece-4093-8e3f-004bd3ffe9be" name="sf-s3-validation-result-check" />
+		<s3:get-object doc:name="Get Object" doc:id="89ea53e1-ef86-4019-86d6-9b4b70b33132" config-ref="Amazon_S3_Configuration" bucketName="#[vars.s3Bucket]" key="#[vars.s3ObjectKey]"/>
+	</sub-flow>
+	<sub-flow name="sf-s3-list-objects" doc:id="5478c9c5-62d3-4fa1-b709-cec0a9481a4a" >
+		<ee:transform doc:name="Parameter Validation" doc:id="0587d5e1-fdff-4c72-b658-dbe91c99ad79" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="s3ParameterValidationError" ><![CDATA[%dw 2.0
+output application/json
+var error = (
+	(if (isEmpty(vars.s3Bucket)) "Bucket name is missing; " else "")
+)
+---
+if (isEmpty(error)) ""
+else error
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="sf-s3-validation-result-check" doc:id="d2a7e155-2160-4ac6-a457-98bf8f20ad9a" name="sf-s3-validation-result-check" />
+		<s3:list-objects doc:name="List Objects" doc:id="fb4790e9-2427-43bb-b215-549bdc62bb6a" config-ref="Amazon_S3_Configuration" bucketName="#[vars.s3Bucket]"/>
+	</sub-flow>
+	<sub-flow name="sf-s3-copy-object" doc:id="33d1ff04-04d4-4cf1-b4b4-a99c6b33cf77" >
+		<ee:transform doc:name="Parameter Validation" doc:id="c910eaa6-f2fa-4744-a748-9ba309e15ca3" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="s3ParameterValidationError" ><![CDATA[%dw 2.0
+output application/json
+var error = (
+	(if (isEmpty(vars.s3SourceBucket)) "Source bucket name is missing; " else "") ++
+	(if (isEmpty(vars.s3SourceObjectKey)) "Source object key (fully qualified file name) is missing; " else "") ++
+	(if (isEmpty(vars.s3DestinationBucket)) "Destination bucket name is missing; " else "") ++
+	(if (isEmpty(vars.s3DestinationObjectKey)) "Destination object key (fully qualified file name) is missing; " else "")
+)
+---
+if (isEmpty(error)) ""
+else error
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="sf-s3-validation-result-check" doc:id="682f0628-0398-4bb8-8e1f-859b0346f6e1" name="sf-s3-validation-result-check" />
+		<s3:copy-object doc:name="Copy Object" doc:id="f345e0df-c653-4acf-8db7-7daaac181f1c" config-ref="Amazon_S3_Configuration" sourceBucketName="#[vars.s3SourceBucket]" sourceKey="#[vars.s3SourceObjectKey]" destinationBucketName="#[vars.s3DestinationBucket]" destinationKey="#[vars.s3DestinationObjectKey]"/>
+	</sub-flow>
+	<sub-flow name="sf-s3-delete-object" doc:id="fbf2ace3-d1e1-4a0b-bbf9-4ef97802d417" >
+		<ee:transform doc:name="Parameter Validation" doc:id="b2a83e38-36d4-4cfa-a185-4f0ddfab7ac4">
+			<ee:message />
+			<ee:variables>
+				<ee:set-variable variableName="s3ParameterValidationError" ><![CDATA[%dw 2.0
+output application/json
+var error = (
+	(if (isEmpty(vars.s3Bucket)) "Bucket name is missing; " else "") ++
+	(if (isEmpty(vars.s3ObjectKey)) "Object key (fully qualified file name) is missing; " else "")
+)
+---
+if (isEmpty(error)) ""
+else error
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="sf-s3-validation-result-check" doc:id="38c1b531-3f50-4c2b-9a16-cc5fb694b3ec" name="sf-s3-validation-result-check" />
+		<s3:delete-object doc:name="Delete Object" doc:id="04a56d5c-fc70-4f98-92ad-9c408bf511a2" config-ref="Amazon_S3_Configuration" bucketName="#[vars.s3Bucket]" key="#[vars.s3ObjectKey]"/>
+	</sub-flow>
+	<sub-flow name="sf-s3-validation-result-check" doc:id="5cb224ca-753e-4b55-891d-3c619ef1cca5" >
+		<choice doc:name="Check Validation Result" doc:id="ac51490d-095f-4659-a5bf-6f4fd526c6e7" >
+			<when expression="#[!isEmpty(vars.s3ParameterValidationError)]">
+				<raise-error doc:name="S3_SYS_FLOWS:VALIDATION_ERROR" doc:id="fa01d325-6a03-46ff-8280-5277cfc34c34" type="S3_SYS_FLOWS:VALIDATION_ERROR" description="#[vars.s3ParameterValidationError]" />
+			</when>
+		</choice>
+	</sub-flow>
+</mule>
